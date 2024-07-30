@@ -14,7 +14,9 @@ option(GOG "Use the GOG API" OFF)
 
 option(OFFICIAL_BUILD "Compile an official build of the game" OFF)
 
-option(MAKEANDPLAY "Compile a version of the game without the main campaign (provided for convenience; consider modifying MakeAndPlay.h instead" OFF)
+option(MAKEANDPLAY "Compile a version of the game without the main campaign (provided for convenience; consider modifying MakeAndPlay.h instead" ON)
+
+add_compile_options(-flto -O3 -fno-rtti -fno-exceptions)
 
 if(OFFICIAL_BUILD AND NOT MAKEANDPLAY)
     set(STEAM ON)
