@@ -12,6 +12,7 @@
 #include "FileSystemUtils.h"
 #include "Font.h"
 #include "GraphicsUtil.h"
+#include "IMERender.h"
 #include "Localization.h"
 #include "Map.h"
 #include "Maths.h"
@@ -424,22 +425,23 @@ void Graphics::print_level_creator(
     int width_for_face = 17;
     int total_width = width_for_face + font::len(print_flags, creator.c_str());
     int face_x, text_x, sprite_x;
+    int offset_x = -7;
     if (!font::is_rtl(print_flags))
     {
         face_x = (SCREEN_WIDTH_PIXELS - total_width) / 2;
         text_x = face_x + width_for_face;
-        sprite_x = 7;
+        sprite_x = 0;
     }
     else
     {
         face_x = (SCREEN_WIDTH_PIXELS + total_width) / 2;
         text_x = face_x - width_for_face;
         face_x -= 10; // sprite origin
-        sprite_x = 103;
+        sprite_x = 96;
         print_flags |= PR_RIGHT;
     }
     set_texture_color_mod(grphx.im_sprites, r, g, b);
-    draw_texture_part(grphx.im_sprites, face_x, y - 1, sprite_x, 2, 10, 10, 1, 1);
+    draw_texture_part(grphx.im_sprites, face_x + offset_x, y - 3, sprite_x, 0, 24, 12, 1, 1);
     set_texture_color_mod(grphx.im_sprites, 255, 255, 255);
     font::print(print_flags, text_x, y, creator, r, g, b);
 }
@@ -928,13 +930,20 @@ void Graphics::drawgui(void)
             size_t j;
             for (j = 0; j < textboxes[i].lines.size(); j++)
             {
-                font::print(
-                    print_flags | PR_BOR,
-                    text_xp,
-                    yp + text_yoff + text_sign * (j * (font_height + textboxes[i].linegap)),
-                    textbox_line(buffer, sizeof(buffer), i, j),
-                    0, 0, 0
-                );
+                const int x = text_xp;
+                const int y = yp + text_yoff + text_sign * (j * (font_height + textboxes[i].linegap));
+                if (!textboxes[i].force_outline)
+                {
+                    font::print(print_flags | PR_BOR, x, y, textbox_line(buffer, sizeof(buffer), i, j), 0, 0, 0);
+                }
+                else if (textboxes[i].outline)
+                {
+                    // We're forcing an outline, so we'll have to draw it ourselves instead of relying on PR_BOR.
+                    font::print(print_flags, x - 1, y, textbox_line(buffer, sizeof(buffer), i, j), 0, 0, 0);
+                    font::print(print_flags, x + 1, y, textbox_line(buffer, sizeof(buffer), i, j), 0, 0, 0);
+                    font::print(print_flags, x, y - 1, textbox_line(buffer, sizeof(buffer), i, j), 0, 0, 0);
+                    font::print(print_flags, x, y + 1, textbox_line(buffer, sizeof(buffer), i, j), 0, 0, 0);
+                }
             }
             for (j = 0; j < textboxes[i].lines.size(); j++)
             {
@@ -1270,6 +1279,15 @@ void Graphics::draw_grid_tile(
     draw_grid_tile(texture, t, x, y, width, height, color, 1, 1);
 }
 
+void Graphics::draw_region_image(int t, int xp, int yp, int wp, int hp)
+{
+    if (!INBOUNDS_ARR(t, customminimaps) || customminimaps[t] == NULL)
+    {
+        return;
+    }
+    draw_texture_part(customminimaps[t], xp, yp, 0, 0, wp, hp, 1, 1);
+}
+
 void Graphics::cutscenebars(void)
 {
     const int usethispos = lerp(oldcutscenebarspos, cutscenebarspos);
@@ -1471,6 +1489,18 @@ void Graphics::setimage(TextboxImage image)
     }
 
     textboxes[m].setimage(image);
+}
+
+void Graphics::textboxoutline(bool enabled)
+{
+    if (!INBOUNDS_VEC(m, textboxes))
+    {
+        vlog_error("textboxoutline() out-of-bounds!");
+        return;
+    }
+
+    textboxes[m].force_outline = true;
+    textboxes[m].outline = enabled;
 }
 
 void Graphics::addline( const std::string& t )
@@ -1835,53 +1865,12 @@ void Graphics::drawgravityline(const int t, const int x, const int y, const int 
         return;
     }
 
-    if (obj.entities[t].life == 0)
+    if (w <= 0 && h <= 0)
     {
-        if (game.noflashingmode)
-        {
-            set_color(200 - 20, 200 - 20, 200 - 20);
-            draw_line(x, y, x + w, y + h);
-            return;
-        }
+        return;
+    }
 
-        switch(linestate)
-        {
-        case 0:
-            set_color(200 - 20, 200 - 20, 200 - 20);
-            break;
-        case 1:
-            set_color(245 - 30, 245 - 30, 225 - 30);
-            break;
-        case 2:
-            set_color(225 - 30, 245 - 30, 245 - 30);
-            break;
-        case 3:
-            set_color(200 - 20, 200 - 20, 164 - 10);
-            break;
-        case 4:
-            set_color(196 - 20, 255 - 30, 224 - 20);
-            break;
-        case 5:
-            set_color(196 - 20, 235 - 30, 205 - 20);
-            break;
-        case 6:
-            set_color(164 - 10, 164 - 10, 164 - 10);
-            break;
-        case 7:
-            set_color(205 - 20, 245 - 30, 225 - 30);
-            break;
-        case 8:
-            set_color(225 - 30, 255 - 30, 205 - 20);
-            break;
-        case 9:
-            set_color(245 - 30, 245 - 30, 245 - 30);
-            break;
-        }
-    }
-    else
-    {
-        set_color(96, 96, 96);
-    }
+    set_color(obj.entities[t].realcol);
 
     draw_line(x, y, x + w, y + h);
 }
@@ -3050,8 +3039,49 @@ SDL_Color Graphics::getcol( int t )
     case 23: // Enemy : Indicator Gray
         return getRGB(255 - help.glow / 2 - (int) (GETCOL_RANDOM * 40), 255 - help.glow/2 - (int) (GETCOL_RANDOM * 40), 255 - help.glow/2 - (int) (GETCOL_RANDOM * 40));
 
-        // Trophies
-        // cyan
+    case 24: // Gravity line (Inactive)
+        return getRGB(96, 96, 96);
+    case 25: // Gravity line (Active)
+        if (game.noflashingmode)
+        {
+            return getRGB(200 - 20, 200 - 20, 200 - 20);
+        }
+
+        switch (linestate)
+        {
+        default:
+        case 0:
+            return getRGB(200 - 20, 200 - 20, 200 - 20);
+        case 1:
+            return getRGB(245 - 30, 245 - 30, 225 - 30);
+        case 2:
+            return getRGB(225 - 30, 245 - 30, 245 - 30);
+        case 3:
+            return getRGB(200 - 20, 200 - 20, 164 - 10);
+        case 4:
+            return getRGB(196 - 20, 255 - 30, 224 - 20);
+        case 5:
+            return getRGB(196 - 20, 235 - 30, 205 - 20);
+        case 6:
+            return getRGB(164 - 10, 164 - 10, 164 - 10);
+        case 7:
+            return getRGB(205 - 20, 245 - 30, 225 - 30);
+        case 8:
+            return getRGB(225 - 30, 255 - 30, 205 - 20);
+        case 9:
+            return getRGB(245 - 30, 245 - 30, 245 - 30);
+        }
+    case 26: // Coin
+        if (game.noflashingmode)
+        {
+            return getRGB(234, 234, 10);
+        }
+        return getRGB(250 - (int) (GETCOL_RANDOM * 32), 250 - (int) (GETCOL_RANDOM * 32), 10);
+    case 27: // Particle flashy red
+        return getRGB((GETCOL_RANDOM * 64), 10, 10);
+
+    // Trophies
+    // cyan
     case 30:
         return RGBf(160, 200, 220);
         // Purple
@@ -3168,30 +3198,17 @@ void Graphics::menuoffrender(void)
     }
 }
 
-SDL_Color Graphics::huetilegetcol()
+void Graphics::textboxabsolutepos(int x, int y)
 {
-    if (game.noflashingmode)
+    if (!INBOUNDS_VEC(m, textboxes))
     {
-        return getRGB(234, 234, 10);
+        vlog_error("textboxabsolutepos() out-of-bounds!");
+        return;
     }
 
-    return getRGB(250 - (int) (fRandom() * 32), 250 - (int) (fRandom() * 32), 10);
-}
-
-SDL_Color Graphics::bigchunkygetcol(int t)
-{
-    // A seperate index of colours, for simplicity
-    float random = game.noflashingmode ? 0.5 : fRandom();
-
-    switch (t)
-    {
-    case 1:
-        return getRGB(random * 64, 10, 10);
-    case 2:
-        return getRGB(160 - help.glow / 2 - (int) (random * 20), 200 - help.glow / 2, 220 - help.glow);
-    }
-    const SDL_Color color = {0, 0, 0, 0};
-    return color;
+    textboxes[m].position_absolute = true;
+    textboxes[m].xp = x;
+    textboxes[m].yp = y;
 }
 
 void Graphics::textboxcenterx(void)
@@ -3385,6 +3402,7 @@ static void commsrelay_textbox(textboxclass* THIS)
     THIS->wrap(11);
     THIS->resize();
     THIS->xp = 224 - THIS->w;
+    THIS->yp = 32 - THIS->h/2;
 }
 
 void Graphics::textboxcommsrelay(const char* text)
@@ -3406,19 +3424,19 @@ int Graphics::crewcolour(const int t)
     switch (t)
     {
     case 0:
-        return CYAN;
+        return EntityColour_CREW_CYAN;
     case 1:
-        return PURPLE;
+        return EntityColour_CREW_PURPLE;
     case 2:
-        return YELLOW;
+        return EntityColour_CREW_YELLOW;
     case 3:
-        return RED;
+        return EntityColour_CREW_RED;
     case 4:
-        return GREEN;
+        return EntityColour_CREW_GREEN;
     case 5:
-        return BLUE;
+        return EntityColour_CREW_BLUE;
     default:
-        return 0;
+        return EntityColour_CREW_CYAN;
     }
 }
 
@@ -3519,16 +3537,20 @@ void Graphics::get_stretch_info(SDL_Rect* rect)
         break;
     default:
         SDL_assert(0 && "Invalid scaling mode!");
-        /* Width and height should be nonzero to avoid division by zero. */
         rect->x = 0;
         rect->y = 0;
         rect->w = width;
         rect->h = height;
     }
+
+    // In case anything accidentally set the width/height to 0, we'll clamp it to avoid crashing from a division by 0
+    rect->w = SDL_max(1, rect->w);
+    rect->h = SDL_max(1, rect->h);
 }
 
 void Graphics::render(void)
 {
+    ime_render();
     draw_screenshot_border();
 
     if (gameScreen.badSignalEffect)
@@ -3541,10 +3563,12 @@ void Graphics::render(void)
 
     draw_window_background();
 
-    SDL_Rect rect;
-    get_stretch_info(&rect);
+    SDL_Rect stretch_info;
+    get_stretch_info(&stretch_info);
 
-    copy_texture(gameTexture, NULL, &rect, 0, NULL, flipmode ? SDL_FLIP_VERTICAL : SDL_FLIP_NONE);
+    ime_set_rect(&stretch_info);
+
+    copy_texture(gameTexture, NULL, &stretch_info, 0, NULL, flipmode ? SDL_FLIP_VERTICAL : SDL_FLIP_NONE);
 }
 
 void Graphics::renderwithscreeneffects(void)

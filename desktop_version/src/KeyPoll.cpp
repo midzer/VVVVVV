@@ -50,7 +50,10 @@ KeyPoll::KeyPoll(void)
     // 0..5
     sensitivity = 2;
 
-    keybuffer="";
+    keybuffer = "";
+    imebuffer = "";
+    imebuffer_start = 0;
+    imebuffer_length = 0;
     leftbutton=0; rightbutton=0; middlebutton=0;
     mousex = 0;
     mousey = 0;
@@ -64,13 +67,19 @@ KeyPoll::KeyPoll(void)
 
 void KeyPoll::enabletextentry(void)
 {
-    keybuffer="";
+    keybuffer = "";
+    imebuffer = "";
+    imebuffer_start = 0;
+    imebuffer_length = 0;
     SDL_StartTextInput();
 }
 
 void KeyPoll::disabletextentry(void)
 {
     SDL_StopTextInput();
+    imebuffer = "";
+    imebuffer_start = 0;
+    imebuffer_length = 0;
 }
 
 bool KeyPoll::textentry(void)
@@ -321,6 +330,17 @@ void KeyPoll::Poll(void)
                 keybuffer += evt.text.text;
             }
             break;
+        case SDL_TEXTEDITING:
+            imebuffer = evt.edit.text;
+            imebuffer_start = evt.edit.start;
+            imebuffer_length = evt.edit.length;
+            break;
+        case SDL_TEXTEDITING_EXT:
+            imebuffer = evt.editExt.text;
+            imebuffer_start = evt.editExt.start;
+            imebuffer_length = evt.editExt.length;
+            SDL_free(evt.editExt.text);
+            break;
 
         /* Mouse Input */
         case SDL_MOUSEMOTION:
@@ -551,8 +571,20 @@ void KeyPoll::Poll(void)
     SDL_Rect rect;
     graphics.get_stretch_info(&rect);
 
-    mousex = (raw_mousex - rect.x) * SCREEN_WIDTH_PIXELS / rect.w;
-    mousey = (raw_mousey - rect.y) * SCREEN_HEIGHT_PIXELS / rect.h;
+    int window_width;
+    int window_height;
+    SDL_GetWindowSizeInPixels(gameScreen.m_window, &window_width, &window_height);
+
+    int scaled_window_width;
+    int scaled_window_height;
+    SDL_GetWindowSize(gameScreen.m_window, &scaled_window_width, &scaled_window_height);
+
+    float scale_x = (float)window_width / (float)scaled_window_width;
+    float scale_y = (float)window_height / (float)scaled_window_height;
+
+    // Use screen stretch information to modify the coordinates (as we implement stretching manually)
+    mousex = ((raw_mousex * scale_x) - rect.x) * SCREEN_WIDTH_PIXELS / rect.w;
+    mousey = ((raw_mousey * scale_y) - rect.y) * SCREEN_HEIGHT_PIXELS / rect.h;
 
     active_input_device_changed = keyboard_was_active != BUTTONGLYPHS_keyboard_is_active();
     should_recompute_textboxes |= active_input_device_changed;

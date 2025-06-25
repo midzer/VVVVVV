@@ -57,6 +57,7 @@ RoomProperty::RoomProperty(void)
     enemyx2=320;
     enemyy2=240;
     enemytype=0;
+    enemyv=0;
     directmode=0;
 }
 
@@ -389,6 +390,7 @@ void customlevelclass::reset(void)
             roomproperties[i+(j*maxwidth)].enemyx2=320;
             roomproperties[i+(j*maxwidth)].enemyy2=240;
             roomproperties[i+(j*maxwidth)].enemytype=0;
+            roomproperties[i+(j*maxwidth)].enemyv=0;
             roomproperties[i+(j*maxwidth)].directmode=0;
         }
     }
@@ -402,6 +404,8 @@ void customlevelclass::reset(void)
     script.textbox_colours.clear();
     script.add_default_colours();
     map.specialroomnames.clear();
+
+    player_colour = 0;
 }
 
 const int* customlevelclass::loadlevel( int rxi, int ryi )
@@ -1264,6 +1268,7 @@ bool customlevelclass::load(std::string _path)
                 edLevelClassElement->QueryIntAttribute("enemyx2", &roomproperties[i].enemyx2);
                 edLevelClassElement->QueryIntAttribute("enemyy2", &roomproperties[i].enemyy2);
                 edLevelClassElement->QueryIntAttribute("enemytype", &roomproperties[i].enemytype);
+                edLevelClassElement->QueryIntAttribute("enemyv", &roomproperties[i].enemyv);
                 edLevelClassElement->QueryIntAttribute("directmode", &roomproperties[i].directmode);
 
                 edLevelClassElement->QueryIntAttribute("warpdir", &roomproperties[i].warpdir);
@@ -1410,6 +1415,12 @@ next:
 
                 map.specialroomnames.push_back(name);
             }
+        }
+
+        if (SDL_strcmp(pKey, "PlayerColour") == 0)
+        {
+            player_colour = help.Int(pText);
+            game.savecolour = player_colour;
         }
     }
 
@@ -1645,6 +1656,7 @@ bool customlevelclass::save(const std::string& _path)
         roompropertyElement->SetAttribute(  "enemyx2", roomproperties[i].enemyx2);
         roompropertyElement->SetAttribute(  "enemyy2", roomproperties[i].enemyy2);
         roompropertyElement->SetAttribute(  "enemytype", roomproperties[i].enemytype);
+        roompropertyElement->SetAttribute( "enemyv", roomproperties[i].enemyv);
         roompropertyElement->SetAttribute(  "directmode", roomproperties[i].directmode);
         roompropertyElement->SetAttribute(  "warpdir", roomproperties[i].warpdir);
 
@@ -1673,40 +1685,27 @@ bool customlevelclass::save(const std::string& _path)
     }
     xml::update_tag(data, "script", scriptString.c_str());
 
+
+    if (player_colour != 0)
+    {
+        xml::update_tag(data, "PlayerColour", player_colour);
+    }
+    else
+    {
+        // Get rid of this one as well, since older levels don't have this property anyways
+        tinyxml2::XMLElement* element;
+        while ((element = data->FirstChildElement("PlayerColour")) != NULL)
+        {
+            doc.DeleteNode(element);
+        }
+    }
+
     return FILESYSTEM_saveTiXml2Document(newpath.c_str(), doc);
 }
 
 void customlevelclass::generatecustomminimap(void)
 {
-    map.customzoom = 1;
-    if (mapwidth <= 10 && mapheight <= 10)
-    {
-        map.customzoom = 2;
-    }
-    if (mapwidth <= 5 && mapheight <= 5)
-    {
-        map.customzoom = 4;
-    }
-
-    // Set minimap offsets
-    switch (map.customzoom)
-    {
-    case 4:
-        map.custommmxoff = 24 * (5 - mapwidth);
-        map.custommmyoff = 18 * (5 - mapheight);
-        break;
-    case 2:
-        map.custommmxoff = 12 * (10 - mapwidth);
-        map.custommmyoff = 9 * (10 - mapheight);
-        break;
-    default:
-        map.custommmxoff = 6 * (20 - mapwidth);
-        map.custommmyoff = int(4.5 * (20 - mapheight));
-        break;
-    }
-
-    map.custommmxsize = 240 - (map.custommmxoff * 2);
-    map.custommmysize = 180 - (map.custommmyoff * 2);
+    const MapRenderData data = map.get_render_data();
 
     // Start drawing the minimap
 
@@ -1715,9 +1714,9 @@ void customlevelclass::generatecustomminimap(void)
     graphics.clear();
 
     // Scan over the map size
-    for (int j2 = 0; j2 < mapheight; j2++)
+    for (int j2 = data.starty; j2 < data.starty + data.height; j2++)
     {
-        for (int i2 = 0; i2 < mapwidth; i2++)
+        for (int i2 = data.startx; i2 < data.startx + data.width; i2++)
         {
             std::vector<SDL_Point> dark_points;
             std::vector<SDL_Point> light_points;
@@ -1725,12 +1724,12 @@ void customlevelclass::generatecustomminimap(void)
             bool dark = getroomprop(i2, j2)->tileset == 1;
 
             // Ok, now scan over each square
-            for (int j = 0; j < 9 * map.customzoom; j++)
+            for (int j = 0; j < 9 * data.zoom; j++)
             {
-                for (int i = 0; i < 12 * map.customzoom; i++)
+                for (int i = 0; i < 12 * data.zoom; i++)
                 {
                     int tile;
-                    switch (map.customzoom)
+                    switch (data.zoom)
                     {
                     case 4:
                         tile = absfree(
@@ -1755,7 +1754,7 @@ void customlevelclass::generatecustomminimap(void)
                     if (tile >= 1)
                     {
                         // Add this pixel
-                        SDL_Point point = { (i2 * 12 * map.customzoom) + i, (j2 * 9 * map.customzoom) + j };
+                        SDL_Point point = { ((i2 - data.startx) * 12 * data.zoom) + i, ((j2 - data.starty) * 9 * data.zoom) + j };
                         if (dark)
                         {
                             dark_points.push_back(point);

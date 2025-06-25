@@ -32,15 +32,6 @@ static int tr;
 static int tg;
 static int tb;
 
-struct MapRenderData
-{
-    int zoom;
-    int xoff;
-    int yoff;
-    int legendxoff;
-    int legendyoff;
-};
-
 static inline void drawslowdowntext(const int y)
 {
     switch (game.slowdown)
@@ -114,7 +105,7 @@ static void volumesliderrender(void)
     }
 
     char slider[40 + 1];
-    slider_get(slider, sizeof(slider), volume_max_position*volume/USER_VOLUME_MAX, volume_max_position+1, 240);
+    slider_get(slider, sizeof(slider), volume_max_position * volume / USER_VOLUME_MAX, volume_max_position + 1, 240);
 
     char buffer[SCREEN_WIDTH_CHARS + 1];
 
@@ -700,9 +691,6 @@ static void menurender(void)
     }
     case Menu::controller:
     {
-        font::print(PR_2X | PR_CEN, -1, 30, loc::gettext("Game Pad"), tr, tg, tb);
-        font::print_wrap(PR_CEN, -1, 55, loc::gettext("Change controller options."), tr, tg, tb);
-
         int spacing = font::height(0);
         spacing = SDL_max(spacing, 10);
 
@@ -710,12 +698,15 @@ static void menurender(void)
         {
         case 0:
         {
-            font::print(PR_RTL_XFLIP, 32, 75, loc::gettext("Low"), tr, tg, tb);
-            font::print(PR_CEN, -1, 75, loc::gettext("Medium"), tr, tg, tb);
-            font::print(PR_RIGHT | PR_RTL_XFLIP, 288, 75, loc::gettext("High"), tr, tg, tb);
+            font::print(PR_2X | PR_CEN, -1, 30, loc::gettext("Stick Sensitivity"), tr, tg, tb);
+            font::print_wrap(PR_CEN, -1, 55, loc::gettext("Change the sensitivity of the analog stick."), tr, tg, tb);
+
+            font::print(PR_RTL_XFLIP, 32, 95, loc::gettext("Low"), tr, tg, tb);
+            font::print(PR_CEN, -1, 95, loc::gettext("Medium"), tr, tg, tb);
+            font::print(PR_RIGHT | PR_RTL_XFLIP, 288, 95, loc::gettext("High"), tr, tg, tb);
             char slider[SCREEN_WIDTH_CHARS + 1];
             slider_get(slider, sizeof(slider), key.sensitivity, 5, 240);
-            font::print(PR_CEN, -1, 75+spacing, slider, tr, tg, tb);
+            font::print(PR_CEN, -1, 95+spacing, slider, tr, tg, tb);
             break;
         }
         case 1:
@@ -724,38 +715,117 @@ static void menurender(void)
         case 4:
         case 5:
         {
-            char buffer_a[SCREEN_WIDTH_CHARS + 1];
-            char buffer_b[SCREEN_WIDTH_CHARS + 1];
+            const char* title = "";
+            switch (game.currentmenuoption)
+            {
+            case 1: title = loc::gettext("Bind Flip"); break;
+            case 2: title = loc::gettext("Bind Enter"); break;
+            case 3: title = loc::gettext("Bind Menu"); break;
+            case 4: title = loc::gettext("Bind Restart"); break;
+            case 5: title = loc::gettext("Bind Interact"); break;
+            }
+            font::print(PR_2X | PR_CEN, -1, 30, title, tr, tg, tb);
 
-            SDL_snprintf(buffer_a, sizeof(buffer_a), "%s%s",
-                loc::gettext("Flip is bound to: "),
-                BUTTONGLYPHS_get_all_gamepad_buttons(buffer_b, sizeof(buffer_b), ActionSet_InGame, Action_InGame_ACTION)
-            );
-            font::print(PR_CEN, -1, 75, buffer_a, tr, tg, tb);
+            if (game.currentmenuoption == 5 && !game.separate_interact)
+            {
+                font::print_wrap(
+                    PR_CEN, -1, 55,
+                    loc::gettext("Interact is currently Enter!|See speedrunner options."),
+                    tr, tg, tb
+                );
+            }
+            else if (!game.gpmenu_confirming)
+            {
+                font::print_wrap(
+                    PR_CEN | PR_BRIGHTNESS(255 - help.glow*2), -1, 55,
+                    loc::gettext("Press a button...|(or press ↑↓)"),
+                    tr, tg, tb
+                );
+            }
+            else
+            {
+                char expl[SCREEN_WIDTH_CHARS*3 + 1];
+                const char* expl_template;
 
-            SDL_snprintf(buffer_a, sizeof(buffer_a), "%s%s",
-                loc::gettext("Enter is bound to: "),
-                BUTTONGLYPHS_get_all_gamepad_buttons(buffer_b, sizeof(buffer_b), ActionSet_InGame, Action_InGame_Map)
-            );
-            font::print(PR_CEN, -1, 75+spacing, buffer_a, tr, tg, tb);
+                if (game.gpmenu_showremove)
+                {
+                    expl_template = loc::gettext("Remove {button}?|Press again to confirm");
+                }
+                else
+                {
+                    expl_template = loc::gettext("Add {button}?|Press again to confirm");
+                }
 
-            SDL_snprintf(buffer_a, sizeof(buffer_a), "%s%s",
-                loc::gettext("Menu is bound to: "),
-                BUTTONGLYPHS_get_all_gamepad_buttons(buffer_b, sizeof(buffer_b), ActionSet_InGame, Action_InGame_Esc)
-            );
-            font::print(PR_CEN, -1, 75+spacing*2, buffer_a, tr, tg, tb);
+                vformat_buf(
+                    expl, sizeof(expl),
+                    expl_template,
+                    "button:str",
+                    BUTTONGLYPHS_sdlbutton_to_glyph(game.gpmenu_lastbutton)
+                );
 
-            SDL_snprintf(buffer_a, sizeof(buffer_a), "%s%s",
-                loc::gettext("Restart is bound to: "),
-                BUTTONGLYPHS_get_all_gamepad_buttons(buffer_b, sizeof(buffer_b), ActionSet_InGame, Action_InGame_Restart)
-            );
-            font::print(PR_CEN, -1, 75+spacing*3, buffer_a, tr, tg, tb);
+                font::print_wrap(PR_CEN, -1, 55, expl, tr, tg, tb);
+            }
 
-            SDL_snprintf(buffer_a, sizeof(buffer_a), "%s%s",
-                loc::gettext("Interact is bound to: "),
-                BUTTONGLYPHS_get_all_gamepad_buttons(buffer_b, sizeof(buffer_b), ActionSet_InGame, Action_InGame_Interact)
-            );
-            font::print(PR_CEN | PR_BRIGHTNESS(game.separate_interact ? 255 : 128), -1, 75+spacing*4, buffer_a, tr, tg, tb);
+            for (int bind = 1; bind <= 5; bind++)
+            {
+                char buffer_a[SCREEN_WIDTH_CHARS + 1];
+                char buffer_b[SCREEN_WIDTH_CHARS + 1];
+
+                const char* lbl;
+                ActionSet actionset;
+                int action;
+
+                switch (bind)
+                {
+                case 1:
+                    lbl = loc::gettext("Flip is bound to: ");
+                    actionset = ActionSet_InGame;
+                    action = Action_InGame_ACTION;
+                    break;
+                case 2:
+                    lbl = loc::gettext("Enter is bound to: ");
+                    actionset = ActionSet_InGame;
+                    action = Action_InGame_Map;
+                    break;
+                case 3:
+                    lbl = loc::gettext("Menu is bound to: ");
+                    actionset = ActionSet_InGame;
+                    action = Action_InGame_Esc;
+                    break;
+                case 4:
+                    lbl = loc::gettext("Restart is bound to: ");
+                    actionset = ActionSet_InGame;
+                    action = Action_InGame_Restart;
+                    break;
+                default:
+                    lbl = loc::gettext("Interact is bound to: ");
+                    actionset = ActionSet_InGame;
+                    action = Action_InGame_Interact;
+                }
+
+                SDL_snprintf(
+                    buffer_a, sizeof(buffer_a), "%s%s", lbl,
+                    BUTTONGLYPHS_get_all_gamepad_buttons(buffer_b, sizeof(buffer_b), actionset, action)
+                );
+
+                int brightness = 255;
+                if (bind == 5 && !game.separate_interact)
+                {
+                    brightness = 128;
+                }
+                else if (game.gpmenu_confirming && game.currentmenuoption == bind)
+                {
+                    brightness = 255 - help.glow*2;
+                }
+
+                font::print(
+                    PR_CEN | PR_BRIGHTNESS(brightness),
+                    -1, 85 + (spacing * (bind-1)),
+                    buffer_a,
+                    tr, tg, tb
+                );
+            }
+
             break;
         }
         }
@@ -1139,6 +1209,7 @@ static void menurender(void)
             break;
         }
         case 2:
+        {
             font::print(PR_2X | PR_CEN, -1, 30, loc::gettext("Room Name BG"), tr, tg, tb);
             int next_y = font::print_wrap(PR_CEN, -1, 65, loc::gettext("Lets you see through what is behind the name at the bottom of the screen."), tr, tg, tb);
             if (graphics.translucentroomname)
@@ -1146,6 +1217,21 @@ static void menurender(void)
             else
                 font::print_wrap(PR_CEN, -1, next_y, loc::gettext("Room name background is OPAQUE"), tr, tg, tb);
             break;
+        }
+        case 3:
+        {
+            font::print(PR_2X | PR_CEN, -1, 30, loc::gettext("Checkpoint Saving"), tr, tg, tb);
+            int next_y = font::print_wrap(PR_CEN, -1, 65, loc::gettext("Toggle if checkpoints should save the game."), tr, tg, tb);
+            if (!game.checkpoint_saving)
+            {
+                font::print_wrap(PR_CEN, -1, next_y, loc::gettext("Checkpoint saving is OFF"), tr / 2, tg / 2, tb / 2);
+            }
+            else
+            {
+                font::print_wrap(PR_CEN, -1, next_y, loc::gettext("Checkpoint saving is ON"), tr, tg, tb);
+            }
+            break;
+        }
         }
         break;
     case Menu::accessibility:
@@ -2773,42 +2859,26 @@ static void draw_roomname_menu(void)
 #define FLIP_PR_CJK_LOW (graphics.flipmode ? PR_CJK_HIGH : PR_CJK_LOW)
 #define FLIP_PR_CJK_HIGH (graphics.flipmode ? PR_CJK_LOW : PR_CJK_HIGH)
 
-static MapRenderData getmaprenderdata(void)
-{
-    MapRenderData data;
-
-    data.zoom = map.custommode ? map.customzoom : 1;
-    data.xoff = map.custommode ? map.custommmxoff : 0;
-    data.yoff = map.custommode ? map.custommmyoff : 0;
-    data.legendxoff = 40 + data.xoff;
-    data.legendyoff = 21 + data.yoff;
-
-    // Magic numbers for centering legend tiles.
-    switch (data.zoom)
-    {
-    case 4:
-        data.legendxoff += 20;
-        data.legendyoff += 14;
-        break;
-    case 2:
-        data.legendxoff += 8;
-        data.legendyoff += 5;
-        break;
-    default:
-        data.legendxoff += 2;
-        data.legendyoff += 1;
-        break;
-    }
-
-    return data;
-}
-
 static void rendermap(void)
 {
     if (map.custommode && map.customshowmm)
     {
-        graphics.drawpixeltextbox(35 + map.custommmxoff, 16 + map.custommmyoff, map.custommmxsize + 10, map.custommmysize + 10, 65, 185, 207);
-        graphics.drawpartimage(graphics.minimap_mounted ? IMAGE_MINIMAP : IMAGE_CUSTOMMINIMAP, 40 + map.custommmxoff, 21 + map.custommmyoff, map.custommmxsize, map.custommmysize);
+        const MapRenderData data = map.get_render_data();
+
+        graphics.drawpixeltextbox(35 + data.xoff, 16 + data.yoff, data.pixelsx + 10, data.pixelsy + 10, 65, 185, 207);
+
+        if (graphics.customminimaps[map.currentregion] != NULL)
+        {
+            graphics.draw_region_image(map.currentregion, 40 + data.xoff, 21 + data.yoff, data.pixelsx, data.pixelsy);
+        }
+        else if (map.currentregion == 0 && graphics.minimap_mounted)
+        {
+            graphics.drawpartimage(IMAGE_MINIMAP, 40 + data.xoff, 21 + data.yoff, data.pixelsx, data.pixelsy);
+        }
+        else
+        {
+            graphics.drawpartimage(IMAGE_CUSTOMMINIMAP, 40 + data.xoff, 21 + data.yoff, data.pixelsx, data.pixelsy);
+        }
         return;
      }
 
@@ -2818,11 +2888,11 @@ static void rendermap(void)
 
 static void rendermapfog(void)
 {
-    const MapRenderData data = getmaprenderdata();
+    const MapRenderData data = map.get_render_data();
 
-    for (int j = 0; j < map.getheight(); j++)
+    for (int j = data.starty; j < data.starty + data.height; j++)
     {
-        for (int i = 0; i < map.getwidth(); i++)
+        for (int i = data.startx; i < data.startx + data.width; i++)
         {
             if (!map.isexplored(i, j))
             {
@@ -2831,7 +2901,7 @@ static void rendermapfog(void)
                 {
                     for (int y = 0; y < data.zoom; y++)
                     {
-                        graphics.drawimage(IMAGE_COVERED, data.xoff + 40 + (x * 12) + (i * (12 * data.zoom)), data.yoff + 21 + (y * 9) + (j * (9 * data.zoom)), false);
+                        graphics.drawimage(IMAGE_COVERED, data.xoff + 40 + (x * 12) + ((i - data.startx) * (12 * data.zoom)), data.yoff + 21 + (y * 9) + ((j - data.starty) * (9 * data.zoom)), false);
                     }
                 }
             }
@@ -2843,17 +2913,22 @@ static void rendermaplegend(void)
 {
     // Draw the map legend, aka teleports/targets/trinkets
 
-    const MapRenderData data = getmaprenderdata();
+    const MapRenderData data = map.get_render_data();
 
     for (size_t i = 0; i < map.teleporters.size(); i++)
     {
-        if (map.showteleporters && map.isexplored(map.teleporters[i].x, map.teleporters[i].y))
+        int x = map.teleporters[i].x - data.startx;
+        int y = map.teleporters[i].y - data.starty;
+        if (x >= 0 && y >= 0 && x < data.width && y < data.height)
         {
-            font::print(PR_FONT_8X8 | PR_FULLBOR, data.legendxoff + (map.teleporters[i].x * 12 * data.zoom), data.legendyoff + (map.teleporters[i].y * 9 * data.zoom), "💿", 171, 255, 252);
-        }
-        else if (map.showtargets && !map.isexplored(map.teleporters[i].x, map.teleporters[i].y))
-        {
-            font::print(PR_FONT_8X8 | PR_FULLBOR, data.legendxoff + (map.teleporters[i].x * 12 * data.zoom), data.legendyoff + (map.teleporters[i].y * 9 * data.zoom), "❓", 64, 64, 64);
+            if (map.showteleporters && map.isexplored(x + data.startx, y + data.starty))
+            {
+                font::print(PR_FONT_8X8 | PR_FULLBOR, data.legendxoff + (x * 12 * data.zoom), data.legendyoff + (y * 9 * data.zoom), "💿", 171, 255, 252);
+            }
+            else if (map.showtargets && !map.isexplored(x + data.startx, y + data.starty))
+            {
+                font::print(PR_FONT_8X8 | PR_FULLBOR, data.legendxoff + (x * 12 * data.zoom), data.legendyoff + (y * 9 * data.zoom), "❓", 64, 64, 64);
+            }
         }
     }
 
@@ -2863,7 +2938,12 @@ static void rendermaplegend(void)
         {
             if (!obj.collect[i])
             {
-                font::print(PR_FONT_8X8 | PR_FULLBOR, data.legendxoff + (map.shinytrinkets[i].x * 12 * data.zoom), data.legendyoff + (map.shinytrinkets[i].y * 9 * data.zoom), "🪙", 254, 252, 58);
+                int x = map.shinytrinkets[i].x - data.startx;
+                int y = map.shinytrinkets[i].y - data.starty;
+                if (x >= 0 && y >= 0 && x < data.width && y < data.height)
+                {
+                    font::print(PR_FONT_8X8 | PR_FULLBOR, data.legendxoff + (x * 12 * data.zoom), data.legendyoff + (y * 9 * data.zoom), "🪙", 254, 252, 58);
+                }
             }
         }
     }
@@ -2871,44 +2951,45 @@ static void rendermaplegend(void)
 
 static void rendermapcursor(const bool flashing)
 {
-    const MapRenderData data = getmaprenderdata();
+    const MapRenderData data = map.get_render_data();
+    int room_x = game.roomx - data.startx - 100;
+    int room_y = game.roomy - data.starty - 100;
+    int pixels_x = room_x * 12;
+    int pixels_y = room_y * 9;
 
     if (!map.custommode && game.roomx == 109)
     {
         // Draw the tower specially
         if (!flashing || game.noflashingmode)
         {
-            graphics.draw_rect(40 + ((game.roomx - 100) * 12) + 2, 21 + 2, 12 - 4, 180 - 4, 16, 245 - (help.glow * 2), 245 - (help.glow * 2));
+            graphics.draw_rect(40 + pixels_x + 2, 21 + 2, 12 - 4, 180 - 4, 16, 245 - (help.glow * 2), 245 - (help.glow * 2));
         }
         else if (map.cursorstate == 1)
         {
             if (int(map.cursordelay / 4) % 2 == 0)
             {
-                graphics.draw_rect(40 + ((game.roomx - 100) * 12), 21, 12, 180, 255, 255, 255);
-                graphics.draw_rect(40 + ((game.roomx - 100) * 12) + 2, 21 + 2, 12 - 4, 180 - 4, 255, 255, 255);
+                graphics.draw_rect(40 + pixels_x, 21, 12, 180, 255, 255, 255);
+                graphics.draw_rect(40 + pixels_x + 2, 21 + 2, 12 - 4, 180 - 4, 255, 255, 255);
             }
         }
         else if (map.cursorstate == 2 && (int(map.cursordelay / 15) % 2 == 0))
         {
-            graphics.draw_rect(40 + ((game.roomx - 100) * 12) + 2, 21 + 2, 12 - 4, 180 - 4, 16, 245 - (help.glow), 245 - (help.glow));
+            graphics.draw_rect(40 + pixels_x + 2, 21 + 2, 12 - 4, 180 - 4, 16, 245 - (help.glow), 245 - (help.glow));
         }
         return;
     }
 
-    if (!flashing || ((map.cursorstate == 2 && int(map.cursordelay / 15) % 2 == 0) || game.noflashingmode))
+    if (room_x >= 0 && room_y >= 0 && room_x < data.width && room_y < data.height)
     {
-        int margin = (data.zoom == 4) ? 2 : 1;
-        graphics.draw_rect(
-            40 + ((game.roomx - 100) * 12 * data.zoom) + margin + data.xoff,
-            21 + ((game.roomy - 100) * 9 * data.zoom) + margin + data.yoff,
-            (12 * data.zoom) - (2 * margin), (9 * data.zoom) - (2 * margin),
-            16, 245 - (help.glow), 245 - (help.glow)
-        );
-    }
-    else if (map.cursorstate == 1 && int(map.cursordelay / 4) % 2 == 0)
-    {
-        graphics.draw_rect(40 + ((game.roomx - 100) * 12 * data.zoom) + data.xoff, 21 + ((game.roomy - 100) * 9 * data.zoom) + data.yoff, 12 * data.zoom, 9 * data.zoom, 255, 255, 255);
-        graphics.draw_rect(40 + ((game.roomx - 100) * 12 * data.zoom) + 2 + data.xoff, 21 + ((game.roomy - 100) * 9 * data.zoom) + 2 + data.yoff, (12 * data.zoom) - 4, (9 * data.zoom) - 4, 255, 255, 255);
+        if (!flashing || ((map.cursorstate == 2 && int(map.cursordelay / 15) % 2 == 0) || game.noflashingmode))
+        {
+            graphics.draw_rect(40 + (pixels_x * data.zoom) + 2 + data.xoff, 21 + (pixels_y * data.zoom) + 2 + data.yoff, (12 * data.zoom) - 4, (9 * data.zoom) - 4, 16, 245 - (help.glow), 245 - (help.glow));
+        }
+        else if (map.cursorstate == 1 && int(map.cursordelay / 4) % 2 == 0)
+        {
+            graphics.draw_rect(40 + (pixels_x * data.zoom) + data.xoff, 21 + (pixels_y * data.zoom) + data.yoff, 12 * data.zoom, 9 * data.zoom, 255, 255, 255);
+            graphics.draw_rect(40 + (pixels_x * data.zoom) + 2 + data.xoff, 21 + (pixels_y * data.zoom) + 2 + data.yoff, (12 * data.zoom) - 4, (9 * data.zoom) - 4, 255, 255, 255);
+        }
     }
 }
 
@@ -3100,26 +3181,30 @@ void maprender(void)
 
             font::print(title_flags | PR_2X | PR_CEN, -1, FLIP(45, 8), meta.title, 196, 196, 255 - help.glow);
             int sp = SDL_max(10, font::height(PR_FONT_LEVEL));
+            int desc_pos = (cl.numcrewmates() > 0) ? 70 : 70 + (sp*2);
             graphics.print_level_creator(creator_flags, FLIP(70, 8), meta.creator, 196, 196, 255 - help.glow);
-            font::print(PR_FONT_LEVEL | PR_CEN, -1, FLIP(70+sp, 8), meta.website, 196, 196, 255 - help.glow);
-            font::print(PR_FONT_LEVEL | PR_CEN, -1, FLIP(70+sp*3, 8), meta.Desc1, 196, 196, 255 - help.glow);
-            font::print(PR_FONT_LEVEL | PR_CEN, -1, FLIP(70+sp*4, 8), meta.Desc2, 196, 196, 255 - help.glow);
+            font::print(PR_FONT_LEVEL | PR_CEN, -1, FLIP(70 + sp, 8), meta.website, 196, 196, 255 - help.glow);
+            font::print(PR_FONT_LEVEL | PR_CEN, -1, FLIP(desc_pos + sp*3, 8), meta.Desc1, 196, 196, 255 - help.glow);
+            font::print(PR_FONT_LEVEL | PR_CEN, -1, FLIP(desc_pos + sp*4, 8), meta.Desc2, 196, 196, 255 - help.glow);
             if (sp <= 10)
             {
-                font::print(PR_FONT_LEVEL | PR_CEN, -1, FLIP(70+sp*5, 8), meta.Desc3, 196, 196, 255 - help.glow);
+                font::print(PR_FONT_LEVEL | PR_CEN, -1, FLIP(desc_pos + sp*5, 8), meta.Desc3, 196, 196, 255 - help.glow);
             }
 
-            int remaining = cl.numcrewmates() - game.crewmates();
+            if (cl.numcrewmates() > 0)
+            {
+                int remaining = cl.numcrewmates() - game.crewmates();
 
-            char buffer[SCREEN_WIDTH_CHARS + 1];
-            loc::gettext_plural_fill(
-                buffer, sizeof(buffer),
-                "{n_crew|wordy} crewmates remain",
-                "{n_crew|wordy} crewmate remains",
-                "n_crew:int",
-                remaining
-            );
-            font::print_wrap(PR_CEN, -1, FLIP(165, 8), buffer, 196, 196, 255 - help.glow);
+                char buffer[SCREEN_WIDTH_CHARS + 1];
+                loc::gettext_plural_fill(
+                    buffer, sizeof(buffer),
+                    "{n_crew|wordy} crewmates remain",
+                    "{n_crew|wordy} crewmate remains",
+                    "n_crew:int",
+                    remaining
+                );
+                font::print_wrap(PR_CEN, -1, FLIP(165, 8), buffer, 196, 196, 255 - help.glow);
+            }
         }
         else
         {
@@ -3192,21 +3277,29 @@ void maprender(void)
         }
 
         /* Stats. */
-        font::print(PR_CEN | FLIP_PR_CJK_HIGH, -1, FLIP(52, 8), loc::gettext("[Trinkets found]"), 196, 196, 255 - help.glow);
-        char buffer[SCREEN_WIDTH_CHARS + 1];
-        vformat_buf(
-            buffer, sizeof(buffer),
-            loc::gettext("{n_trinkets|wordy} out of {max_trinkets|wordy}"),
-            "n_trinkets:int, max_trinkets:int",
-            game.trinkets(), max_trinkets
-        );
-        font::print(PR_CEN | FLIP_PR_CJK_LOW, -1, FLIP(64, 8), buffer, 96, 96, 96);
 
-        font::print(PR_CEN | FLIP_PR_CJK_HIGH, -1, FLIP(102, 8), loc::gettext("[Number of Deaths]"), 196, 196, 255 - help.glow);
-        font::print(PR_CEN | FLIP_PR_CJK_LOW, -1, FLIP(114, 8), help.String(game.deathcounts), 96, 96, 96);
+        // Always show trinkets if you're in the main game, otherwise only show them if any exist in the level
+        bool show_trinkets = map.custommode ? (cl.numtrinkets() > 0) : true;
+        int deaths_pos = show_trinkets ? 102 : 72;
+        int time_pos = show_trinkets ? 152 : 132;
+        if (show_trinkets)
+        {
+            font::print(PR_CEN | FLIP_PR_CJK_HIGH, -1, FLIP(52, 8), loc::gettext("[Trinkets found]"), 196, 196, 255 - help.glow);
+            char buffer[SCREEN_WIDTH_CHARS + 1];
+            vformat_buf(
+                buffer, sizeof(buffer),
+                loc::gettext("{n_trinkets|wordy} out of {max_trinkets|wordy}"),
+                "n_trinkets:int, max_trinkets:int",
+                game.trinkets(), max_trinkets
+            );
+            font::print(PR_CEN | FLIP_PR_CJK_LOW, -1, FLIP(64, 8), buffer, 96, 96, 96);
+        }
 
-        font::print(PR_CEN | FLIP_PR_CJK_HIGH, -1, FLIP(152, 8), loc::gettext("[Time Taken]"), 196, 196, 255 - help.glow);
-        font::print(PR_CEN | FLIP_PR_CJK_LOW, -1, FLIP(164, 8), game.timestring(), 96, 96, 96);
+        font::print(PR_CEN | FLIP_PR_CJK_HIGH, -1, FLIP(deaths_pos, 8), loc::gettext("[Number of Deaths]"), 196, 196, 255 - help.glow);
+        font::print(PR_CEN | FLIP_PR_CJK_LOW, -1, FLIP(deaths_pos + 12, 8), help.String(game.deathcounts), 96, 96, 96);
+
+        font::print(PR_CEN | FLIP_PR_CJK_HIGH, -1, FLIP(time_pos, 8), loc::gettext("[Time Taken]"), 196, 196, 255 - help.glow);
+        font::print(PR_CEN | FLIP_PR_CJK_LOW, -1, FLIP(time_pos + 12, 8), game.timestring(), 96, 96, 96);
         break;
     }
     case 3:
@@ -3475,7 +3568,7 @@ void teleporterrender(void)
 
     // Draw a box around the currently selected teleporter
 
-    const MapRenderData data = getmaprenderdata();
+    const MapRenderData data = map.get_render_data();
 
     if (game.useteleporter)
     {

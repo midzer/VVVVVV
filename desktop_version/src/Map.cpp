@@ -52,9 +52,8 @@ mapclass::mapclass(void)
 
     custommode=false;
     custommodeforreal=false;
-    custommmxoff=0; custommmyoff=0; custommmxsize=0; custommmysize=0;
-    customzoom=0;
     customshowmm=true;
+    revealmap = true;
 
     rcol = 0;
 
@@ -88,6 +87,9 @@ mapclass::mapclass(void)
     roomtexton = false;
 
     nexttowercolour_set = false;
+
+    currentregion = 0;
+    SDL_zeroa(region);
 }
 
 static char roomname_static[SCREEN_WIDTH_CHARS];
@@ -196,6 +198,12 @@ void mapclass::resetmap(void)
 {
     //clear the explored area of the map
     SDL_memset(explored, 0, sizeof(explored));
+}
+
+void mapclass::fullmap(void)
+{
+    //mark the whole map as explored
+    SDL_memset(explored, 1, sizeof(explored));
 }
 
 void mapclass::updateroomnames(void)
@@ -478,28 +486,28 @@ int mapclass::maptiletoenemycol(int t)
     switch(t)
     {
     case 0:
-        return 11;
+        return EntityColour_ENEMY_CYAN;
         break;
     case 1:
-        return 6;
+        return EntityColour_ENEMY_RED;
         break;
     case 2:
-        return 8;
+        return EntityColour_ENEMY_PINK;
         break;
     case 3:
-        return 12;
+        return EntityColour_ENEMY_BLUE;
         break;
     case 4:
-        return 9;
+        return EntityColour_ENEMY_YELLOW;
         break;
     case 5:
-        return 7;
+        return EntityColour_ENEMY_GREEN;
         break;
     case 6:
-        return 18;
+        return EntityColour_ENEMY_GRAY;
         break;
     }
-    return 11;
+    return EntityColour_ENEMY_CYAN;
 }
 
 void mapclass::changefinalcol(int t)
@@ -511,7 +519,7 @@ void mapclass::changefinalcol(int t)
     //Next, entities
     for (size_t i = 0; i < obj.entities.size(); i++)
     {
-        if (obj.entities[i].type == 1) //something with a movement behavior
+        if (obj.entities[i].type == EntityType_MOVING)
         {
             if (obj.entities[i].animate == 10 || obj.entities[i].animate == 11) //treadmill
             {
@@ -534,7 +542,7 @@ void mapclass::changefinalcol(int t)
                 obj.entities[i].colour = maptiletoenemycol(temp);
             }
         }
-        else if (obj.entities[i].type == 2)    //disappearing platforms
+        else if (obj.entities[i].type == EntityType_DISAPPEARING_PLATFORM)
         {
             obj.entities[i].tile = 915+(temp*40);
         }
@@ -884,7 +892,7 @@ void mapclass::gotoroom(int rx, int ry)
     //Ok, let's save the position of all lines on the screen
     for (size_t i = 0; i < obj.entities.size(); i++)
     {
-        if (obj.entities[i].type == 9)
+        if (obj.entities[i].type == EntityType_HORIZONTAL_GRAVITY_LINE)
         {
             //It's a horizontal line
             if (obj.entities[i].xp <= 0 || (obj.entities[i].xp + obj.entities[i].w) >= 312)
@@ -1022,7 +1030,7 @@ void mapclass::gotoroom(int rx, int ry)
 
     for (size_t i = 0; i < obj.entities.size(); i++)
     {
-        if (obj.entities[i].type == 9)
+        if (obj.entities[i].type == EntityType_HORIZONTAL_GRAVITY_LINE)
         {
             //It's a horizontal line
             if (obj.entities[i].xp <= 0 || obj.entities[i].xp + obj.entities[i].w >= 312)
@@ -1304,12 +1312,15 @@ static void copy_short_to_int(int* dest, const short* src, const size_t size)
 void mapclass::loadlevel(int rx, int ry)
 {
     int t;
-    if (!finalmode)
+    if (revealmap)
     {
-        setexplored(rx - 100, ry - 100, true);
-        if (rx == 109 && !custommode)
+        if (!finalmode)
         {
-            exploretower();
+            setexplored(rx - 100, ry - 100, true);
+            if (rx == 109 && !custommode)
+            {
+                exploretower();
+            }
         }
     }
 
@@ -1850,7 +1861,7 @@ void mapclass::loadlevel(int rx, int ry)
             {
             case 1: // Enemies
                 obj.customenemy = room->enemytype;
-                obj.createentity(ex, ey, 56, ent.p1, 4, bx1, by1, bx2, by2);
+                obj.createentity(ex, ey, 56, ent.p1, 4 + room->enemyv, bx1, by1, bx2, by2);
                 break;
             case 2: // Platforms and conveyors
                 if (ent.p1 <= 4)
@@ -2047,7 +2058,7 @@ void mapclass::loadlevel(int rx, int ry)
 
         for (size_t i = 0; i < obj.entities.size(); i++)
         {
-            if (obj.entities[i].type == 1 && obj.entities[i].behave >= 8 && obj.entities[i].behave < 10)
+            if (obj.entities[i].type == EntityType_MOVING && obj.entities[i].behave >= 8 && obj.entities[i].behave < 10)
             {
                 //put a block underneath
                 int temp = obj.entities[i].xp / 8.0f;
@@ -2174,7 +2185,7 @@ void mapclass::loadlevel(int rx, int ry)
             {
                 //A slight varation - she's upside down
                 obj.createentity(249, 62, 18, 16, 0, 18);
-                int j = obj.getcrewman(BLUE);
+                int j = obj.getcrewman(EntityColour_CREW_BLUE);
                 if (INBOUNDS_VEC(j, obj.entities))
                 {
                     obj.entities[j].rule = 7;
@@ -2195,16 +2206,16 @@ void mapclass::twoframedelayfix(void)
     // A bit kludge-y, but it's the least we can do without changing the frame ordering.
 
     if (GlitchrunnerMode_less_than_or_equal(Glitchrunner2_2)
-    || !custommode
-    || game.deathseq != -1)
+        || !custommode
+        || game.deathseq != -1)
         return;
 
     int block_idx = -1;
     // obj.checktrigger() sets block_idx
     int activetrigger = obj.checktrigger(&block_idx);
     if (activetrigger <= -1
-    || !INBOUNDS_VEC(block_idx, obj.blocks)
-    || activetrigger < 300)
+        || !INBOUNDS_VEC(block_idx, obj.blocks)
+        || activetrigger < 300)
     {
         return;
     }
@@ -2214,4 +2225,132 @@ void mapclass::twoframedelayfix(void)
     game.setstate(0);
     game.setstatedelay(0);
     script.load(game.newscript);
+}
+
+MapRenderData mapclass::get_render_data(void)
+{
+    MapRenderData data;
+    data.width = getwidth();
+    data.height = getheight();
+
+    data.startx = 0;
+    data.starty = 0;
+
+    // Region handling
+    if (region[currentregion].isvalid)
+    {
+        data.startx = region[currentregion].rx;
+        data.starty = region[currentregion].ry;
+        data.width = ((region[currentregion].rx2 - data.startx) + 1);
+        data.height = ((region[currentregion].ry2 - data.starty) + 1);
+    }
+
+    data.zoom = 1;
+
+    if (data.width <= 10 && data.height <= 10)
+    {
+        data.zoom = 2;
+    }
+    if (data.width <= 5 && data.height <= 5)
+    {
+        data.zoom = 4;
+    }
+
+    data.xoff = 0;
+    data.yoff = 0;
+
+    // Set minimap offsets
+    switch (data.zoom)
+    {
+    case 4:
+        data.xoff = 24 * (5 - data.width);
+        data.yoff = 18 * (5 - data.height);
+        break;
+    case 2:
+        data.xoff = 12 * (10 - data.width);
+        data.yoff = 9 * (10 - data.height);
+        break;
+    default:
+        data.xoff = 6 * (20 - data.width);
+        data.yoff = (int)(4.5 * (20 - data.height));
+        break;
+    }
+
+    data.pixelsx = 240 - (data.xoff * 2);
+    data.pixelsy = 180 - (data.yoff * 2);
+
+    data.legendxoff = 40 + data.xoff;
+    data.legendyoff = 21 + data.yoff;
+
+    // Magic numbers for centering legend tiles.
+    switch (data.zoom)
+    {
+    case 4:
+        data.legendxoff += 21;
+        data.legendyoff += 16;
+        break;
+    case 2:
+        data.legendxoff += 9;
+        data.legendyoff += 5;
+        break;
+    default:
+        data.legendxoff += 3;
+        data.legendyoff += 1;
+        break;
+    }
+
+    return data;
+}
+
+void mapclass::setregion(int id, int rx, int ry, int rx2, int ry2)
+{
+    if (INBOUNDS_ARR(id, region) && id > 0)
+    {
+        // swap the variables if they're entered in the wrong order
+        if (rx2 < rx)
+        {
+            int temp = rx;
+            rx = rx2;
+            rx2 = temp;
+        }
+        if (ry2 < ry)
+        {
+            int temp = ry;
+            ry = ry2;
+            ry2 = temp;
+        }
+        
+        region[id].isvalid = true;
+        region[id].rx = SDL_clamp(rx, 0, cl.mapwidth - 1);
+        region[id].ry = SDL_clamp(ry, 0, cl.mapheight - 1);
+        region[id].rx2 = SDL_clamp(rx2, 0, cl.mapwidth - 1);
+        region[id].ry2 = SDL_clamp(ry2, 0, cl.mapheight - 1);
+
+        if (id == currentregion)
+        {
+            cl.generatecustomminimap();
+        }
+    }
+}
+
+void mapclass::removeregion(int id)
+{
+    if (INBOUNDS_ARR(id, region) && id > 0)
+    {
+        SDL_zero(region[id]);
+
+        if (id == currentregion)
+        {
+            cl.generatecustomminimap();
+        }
+    }
+}
+
+void mapclass::changeregion(int id)
+{
+    if (INBOUNDS_ARR(id, region))
+    {
+        currentregion = id;
+        cl.generatecustomminimap();
+    }
 }

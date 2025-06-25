@@ -31,6 +31,7 @@ public:
     FOREACH_PROP(enemyx2, int) \
     FOREACH_PROP(enemyy2, int) \
     FOREACH_PROP(enemytype, int) \
+    FOREACH_PROP(enemyv, int) \
     FOREACH_PROP(directmode, int)
 
 class RoomProperty
@@ -169,6 +170,8 @@ public:
     SDL_Color getonewaycol(int rx, int ry);
     SDL_Color getonewaycol(void);
     bool onewaycol_override;
+
+    int player_colour;
 };
 
 bool translate_title(const std::string& title);

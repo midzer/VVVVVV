@@ -1048,11 +1048,11 @@ static void draw_entities(void)
 
                 if (entity->p1 == 0)  // Facing right
                 {
-                    graphics.draw_sprite(x - 4, y, 0, graphics.col_crewcyan);
+                    graphics.draw_sprite(x - 4, y, 0, graphics.getcol(cl.player_colour));
                 }
                 else // Non-zero is facing left
                 {
-                    graphics.draw_sprite(x - 4, y, 3, graphics.col_crewcyan);
+                    graphics.draw_sprite(x - 4, y, 3, graphics.getcol(cl.player_colour));
                 }
 
                 graphics.draw_rect(x, y, 16, 24, graphics.getRGB(255, 255, 164));
@@ -1958,6 +1958,8 @@ void editorrenderfixed(void)
     extern editorclass ed;
     const RoomProperty* const room = cl.getroomprop(ed.levx, ed.levy);
     graphics.updatetitlecolours();
+
+    graphics.trinketcolset = false;
 
     game.customcol = cl.getlevelcol(room->tileset, room->tilecol) + 1;
     ed.entcol = cl.getenemycol(game.customcol);
@@ -3096,12 +3098,22 @@ static void handle_draw_input()
 
         const int room = ed.levx + ed.levy * cl.maxwidth;
         const int plat_speed = cl.roomproperties[room].platv;
+        const int enemy_speed = cl.roomproperties[room].enemyv;
 
+        const bool ctrl = key.keymap[SDLK_LCTRL] || key.keymap[SDLK_RCTRL];
+        const bool shift = key.keymap[SDLK_LSHIFT] || key.keymap[SDLK_RSHIFT];
         if (key.keymap[SDLK_COMMA])
         {
-            if (key.keymap[SDLK_LCTRL] || key.keymap[SDLK_RCTRL])
+            if (ctrl)
             {
-                cl.roomproperties[room].platv = plat_speed - 1;
+                if (shift)
+                {
+                    cl.roomproperties[room].enemyv = enemy_speed - 1;
+                }
+                else
+                {
+                    cl.roomproperties[room].platv = plat_speed - 1;
+                }
             }
             else
             {
@@ -3111,9 +3123,16 @@ static void handle_draw_input()
         }
         else if (key.keymap[SDLK_PERIOD])
         {
-            if (key.keymap[SDLK_LCTRL] || key.keymap[SDLK_RCTRL])
+            if (ctrl)
             {
-                cl.roomproperties[room].platv = plat_speed + 1;
+                if (shift)
+                {
+                    cl.roomproperties[room].enemyv = enemy_speed + 1;
+                }
+                else
+                {
+                    cl.roomproperties[room].platv = plat_speed + 1;
+                }
             }
             else
             {
@@ -3130,6 +3149,18 @@ static void handle_draw_input()
                 loc::gettext("Platform speed is now {speed}"),
                 "speed:int",
                 cl.roomproperties[room].platv
+            );
+            ed.show_note(buffer);
+        }
+
+        if (enemy_speed != cl.roomproperties[room].enemyv)
+        {
+            char buffer[3 * SCREEN_WIDTH_CHARS + 1];
+            vformat_buf(
+                buffer, sizeof(buffer),
+                loc::gettext("Enemy speed is now {speed}"),
+                "speed:int",
+                cl.roomproperties[room].enemyv + 4
             );
             ed.show_note(buffer);
         }

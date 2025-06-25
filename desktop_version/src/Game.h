@@ -225,6 +225,8 @@ public:
     void crewmate_textbox(const int color);
     void remaining_textbox(void);
     void actionprompt_textbox(void);
+    void show_save_fail(void);
+    void checkpoint_save(void);
     void savetele_textbox(void);
 
     void setstate(int gamestate);
@@ -363,6 +365,7 @@ public:
     int savetrinkets;
     bool startscript;
     std::string newscript;
+    bool checkpoint_saving;
 
     bool menustart;
 
@@ -401,6 +404,10 @@ public:
     int creditposx, creditposy, creditposdelay;
     int oldcreditposx;
 
+    SDL_GameControllerButton gpmenu_lastbutton;
+    bool gpmenu_confirming;
+    bool gpmenu_showremove;
+
     bool silence_settings_error;
 
 
@@ -432,6 +439,8 @@ public:
     int ndmresulthardestroom_y;
     bool ndmresulthardestroom_specialname;
     void copyndmresults(void);
+    bool nodeatheligible;
+    void invalidate_ndm_trophy(void);
 
     //Time Trials
     bool intimetrial, timetrialparlost;

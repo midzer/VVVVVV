@@ -146,7 +146,7 @@ void Game::init(void)
     prevroomy = 0;
     saverx = 0;
     savery = 0;
-    savecolour = 0;
+    savecolour = EntityColour_CREW_CYAN;
 
     mutebutton = 0;
     muted = false;
@@ -225,6 +225,7 @@ void Game::init(void)
     ndmresulthardestroom_x = hardestroom_x;
     ndmresulthardestroom_y = hardestroom_y;
     ndmresulthardestroom_specialname = false;
+    nodeatheligible = false;
 
     customcol=0;
 
@@ -252,6 +253,10 @@ void Game::init(void)
     menucountdown = 0;
     levelpage=0;
     playcustomlevel=0;
+
+    gpmenu_lastbutton = SDL_CONTROLLER_BUTTON_INVALID;
+    gpmenu_confirming = false;
+    gpmenu_showremove = false;
 
     silence_settings_error = false;
 
@@ -375,6 +380,12 @@ void Game::init(void)
     old_screenshot_border_timer = 0;
     screenshot_border_timer = 0;
     screenshot_saved_success = false;
+
+#if defined(__ANDROID__) || TARGET_OS_IPHONE
+    checkpoint_saving = true;
+#else
+    checkpoint_saving = false;
+#endif
 
     setdefaultcontrollerbuttons();
 }
@@ -821,12 +832,37 @@ static void savetele_textbox_success(textboxclass* THIS)
     THIS->pad(3, 3);
 }
 
-static void savetele_textbox_fail(textboxclass* THIS)
+static void save_textbox_fail(textboxclass* THIS)
 {
     THIS->lines.clear();
     THIS->lines.push_back(loc::gettext("ERROR: Could not save game!"));
     THIS->wrap(2);
     THIS->pad(1, 1);
+}
+
+void Game::show_save_fail(void)
+{
+    graphics.createtextboxflipme("", -1, 12, TEXT_COLOUR("red"));
+    graphics.textboxprintflags(PR_FONT_INTERFACE);
+    graphics.textboxcenterx();
+    graphics.textboxtimer(50);
+    graphics.textboxtranslate(TEXTTRANSLATE_FUNCTION, save_textbox_fail);
+}
+
+void Game::checkpoint_save(void)
+{
+    if (checkpoint_saving && !inspecial() && (!map.custommode || (map.custommode && map.custommodeforreal)) && !cliplaytest)
+    {
+        bool success = map.custommode ? customsavequick(cl.ListOfMetaData[playcustomlevel].filename) : savequick();
+        gamesaved = success;
+        gamesavefailed = !success;
+
+        if (gamesavefailed)
+        {
+            show_save_fail();
+            graphics.textboxapplyposition();
+        }
+    }
 }
 
 void Game::savetele_textbox(void)
@@ -846,11 +882,7 @@ void Game::savetele_textbox(void)
     }
     else
     {
-        graphics.createtextboxflipme("", -1, 12, TEXT_COLOUR("red"));
-        graphics.textboxprintflags(PR_FONT_INTERFACE);
-        graphics.textboxcenterx();
-        graphics.textboxtimer(50);
-        graphics.textboxtranslate(TEXTTRANSLATE_FUNCTION, savetele_textbox_fail);
+        show_save_fail();
     }
     graphics.textboxapplyposition();
 }
@@ -2535,7 +2567,7 @@ void Game::updatestate(void)
             int i = obj.getplayer();
             if (INBOUNDS_VEC(i, obj.entities))
             {
-                obj.entities[i].colour = 0;
+                obj.entities[i].colour = EntityColour_CREW_CYAN;
                 obj.entities[i].invis = false;
 
                 int j = obj.getteleporter();
@@ -2556,7 +2588,7 @@ void Game::updatestate(void)
             if (INBOUNDS_VEC(i, obj.entities))
             {
                 obj.entities[i].tile = 1;
-                obj.entities[i].colour = 101;
+                obj.entities[i].colour = EntityColour_TELEPORTER_ACTIVE;
             }
             break;
         }
@@ -2729,7 +2761,7 @@ void Game::updatestate(void)
             int i = obj.getplayer();
             if (INBOUNDS_VEC(i, obj.entities))
             {
-                obj.entities[i].colour = 0;
+                obj.entities[i].colour = EntityColour_CREW_CYAN;
                 obj.entities[i].invis = true;
             }
 
@@ -2743,7 +2775,7 @@ void Game::updatestate(void)
             if (INBOUNDS_VEC(i, obj.entities))
             {
                 obj.entities[i].tile = 1;
-                obj.entities[i].colour = 100;
+                obj.entities[i].colour = EntityColour_TELEPORTER_INACTIVE;
             }
             break;
         }
@@ -3312,11 +3344,14 @@ void Game::updatestate(void)
             }
         }
 
-
-            if (nodeathmode)
+            if (nodeathmode || nodeatheligible)
             {
                 unlockAchievement("vvvvvvmaster"); //bloody hell
                 unlocknum(UnlockTrophy_NODEATHMODE_COMPLETE);
+            }
+
+            if (nodeathmode)
+            {
                 setstate(3520);
                 setstatedelay(0);
             }
@@ -3334,7 +3369,7 @@ void Game::updatestate(void)
             int i = obj.getplayer();
             if (INBOUNDS_VEC(i, obj.entities))
             {
-                obj.entities[i].colour = 102;
+                obj.entities[i].colour = EntityColour_TELEPORTER_FLASHING;
             }
 
             incstate();
@@ -3376,7 +3411,7 @@ void Game::updatestate(void)
             int i = obj.getplayer();
             if (INBOUNDS_VEC(i, obj.entities))
             {
-                obj.entities[i].colour = 0;
+                obj.entities[i].colour = EntityColour_CREW_CYAN;
                 obj.entities[i].invis = true;
             }
 
@@ -3461,7 +3496,7 @@ void Game::updatestate(void)
             int i = obj.getplayer();
             if (INBOUNDS_VEC(i, obj.entities))
             {
-                obj.entities[i].colour = 0;
+                obj.entities[i].colour = EntityColour_CREW_CYAN;
                 obj.entities[i].invis = true;
             }
 
@@ -3469,7 +3504,7 @@ void Game::updatestate(void)
             if(INBOUNDS_VEC(i, obj.entities))
             {
                 obj.entities[i].tile = 1;
-                obj.entities[i].colour = 100;
+                obj.entities[i].colour = EntityColour_TELEPORTER_INACTIVE;
             }
             break;
         }
@@ -3513,9 +3548,9 @@ void Game::updatestate(void)
                     obj.entities[i].lerpoldxp = obj.entities[i].xp;
                     obj.entities[i].lerpoldyp = obj.entities[i].yp;
                     obj.entities[j].tile = 2;
-                    obj.entities[j].colour = 101;
+                    obj.entities[j].colour = EntityColour_TELEPORTER_ACTIVE;
                 }
-                obj.entities[i].colour = 0;
+                obj.entities[i].colour = EntityColour_CREW_CYAN;
                 obj.entities[i].invis = false;
                 obj.entities[i].dir = 1;
 
@@ -3644,9 +3679,9 @@ void Game::updatestate(void)
                     obj.entities[i].lerpoldxp = obj.entities[i].xp;
                     obj.entities[i].lerpoldyp = obj.entities[i].yp;
                     obj.entities[j].tile = 2;
-                    obj.entities[j].colour = 101;
+                    obj.entities[j].colour = EntityColour_TELEPORTER_ACTIVE;
                 }
-                obj.entities[i].colour = 0;
+                obj.entities[i].colour = EntityColour_CREW_CYAN;
                 obj.entities[i].invis = false;
                 obj.entities[i].dir = 1;
 
@@ -3757,9 +3792,9 @@ void Game::updatestate(void)
                     obj.entities[i].lerpoldxp = obj.entities[i].xp;
                     obj.entities[i].lerpoldyp = obj.entities[i].yp;
                     obj.entities[j].tile = 2;
-                    obj.entities[j].colour = 101;
+                    obj.entities[j].colour = EntityColour_TELEPORTER_ACTIVE;
                 }
-                obj.entities[i].colour = 0;
+                obj.entities[i].colour = EntityColour_CREW_CYAN;
                 obj.entities[i].invis = false;
                 obj.entities[i].dir = 0;
 
@@ -3870,9 +3905,9 @@ void Game::updatestate(void)
                     obj.entities[i].lerpoldxp = obj.entities[i].xp;
                     obj.entities[i].lerpoldyp = obj.entities[i].yp;
                     obj.entities[j].tile = 2;
-                    obj.entities[j].colour = 101;
+                    obj.entities[j].colour = EntityColour_TELEPORTER_ACTIVE;
                 }
-                obj.entities[i].colour = 0;
+                obj.entities[i].colour = EntityColour_CREW_CYAN;
                 obj.entities[i].invis = false;
                 obj.entities[i].dir = 1;
 
@@ -3988,9 +4023,9 @@ void Game::updatestate(void)
                     obj.entities[i].lerpoldxp = obj.entities[i].xp;
                     obj.entities[i].lerpoldyp = obj.entities[i].yp;
                     obj.entities[j].tile = 2;
-                    obj.entities[j].colour = 101;
+                    obj.entities[j].colour = EntityColour_TELEPORTER_ACTIVE;
                 }
-                obj.entities[i].colour = 0;
+                obj.entities[i].colour = EntityColour_CREW_CYAN;
                 obj.entities[i].invis = false;
                 obj.entities[i].dir = 1;
 
@@ -4106,9 +4141,9 @@ void Game::updatestate(void)
                     obj.entities[i].lerpoldxp = obj.entities[i].xp;
                     obj.entities[i].lerpoldyp = obj.entities[i].yp;
                     obj.entities[j].tile = 2;
-                    obj.entities[j].colour = 101;
+                    obj.entities[j].colour = EntityColour_TELEPORTER_ACTIVE;
                 }
-                obj.entities[i].colour = 0;
+                obj.entities[i].colour = EntityColour_CREW_CYAN;
                 obj.entities[i].invis = false;
                 obj.entities[i].dir = 0;
 
@@ -4222,7 +4257,7 @@ void Game::updatestate(void)
                     obj.entities[i].lerpoldxp = obj.entities[i].xp;
                     obj.entities[i].lerpoldyp = obj.entities[i].yp;
                     obj.entities[j].tile = 2;
-                    obj.entities[j].colour = 101;
+                    obj.entities[j].colour = EntityColour_TELEPORTER_ACTIVE;
                 }
                 obj.entities[i].invis = false;
                 obj.entities[i].dir = 1;
@@ -4335,9 +4370,9 @@ void Game::updatestate(void)
                     obj.entities[i].lerpoldxp = obj.entities[i].xp;
                     obj.entities[i].lerpoldyp = obj.entities[i].yp;
                     obj.entities[j].tile = 2;
-                    obj.entities[j].colour = 101;
+                    obj.entities[j].colour = EntityColour_TELEPORTER_ACTIVE;
                 }
-                obj.entities[i].colour = 0;
+                obj.entities[i].colour = EntityColour_CREW_CYAN;
                 obj.entities[i].invis = false;
                 obj.entities[i].dir = 1;
 
@@ -4448,9 +4483,9 @@ void Game::updatestate(void)
                     obj.entities[i].lerpoldxp = obj.entities[i].xp;
                     obj.entities[i].lerpoldyp = obj.entities[i].yp;
                     obj.entities[j].tile = 2;
-                    obj.entities[j].colour = 101;
+                    obj.entities[j].colour = EntityColour_TELEPORTER_ACTIVE;
                 }
-                obj.entities[i].colour = 0;
+                obj.entities[i].colour = EntityColour_CREW_CYAN;
                 obj.entities[i].invis = false;
                 obj.entities[i].dir = 1;
 
@@ -4936,6 +4971,10 @@ void Game::deserializesettings(tinyxml2::XMLElement* dataNode, struct ScreenSett
             roomname_translator::set_enabled(help.Int(pText));
         }
 
+        if (SDL_strcmp(pKey, "checkpoint_saving") == 0)
+        {
+            checkpoint_saving = help.Int(pText);
+        }
     }
 
     setdefaultcontrollerbuttons();
@@ -5194,6 +5233,8 @@ void Game::serializesettings(tinyxml2::XMLElement* dataNode, const struct Screen
     xml::update_tag(dataNode, "english_sprites", (int) loc::english_sprites);
     xml::update_tag(dataNode, "new_level_font", loc::new_level_font.c_str());
     xml::update_tag(dataNode, "roomname_translator", (int) roomname_translator::enabled);
+
+    xml::update_tag(dataNode, "checkpoint_saving", (int) checkpoint_saving);
 }
 
 static bool settings_loaded = false;
@@ -5326,7 +5367,7 @@ void Game::deathsequence(void)
     }
     if (INBOUNDS_VEC(i, obj.entities))
     {
-        obj.entities[i].colour = 1;
+        obj.entities[i].colour = EntityColour_DEAD;
 
         obj.entities[i].invis = false;
     }
@@ -5893,6 +5934,10 @@ void Game::customloadquick(const std::string& savfile)
         {
             map.customshowmm = help.Int(pText);
         }
+        else if (SDL_strcmp(pKey, "mapreveal") == 0)
+        {
+            map.revealmap = help.Int(pText);
+        }
         else if (SDL_strcmp(pKey, "disabletemporaryaudiopause") == 0)
         {
             disabletemporaryaudiopause = help.Int(pText);
@@ -5906,6 +5951,48 @@ void Game::customloadquick(const std::string& savfile)
             map.setroomname(pText);
             map.roomnameset = true;
             map.roomname_special = true;
+        }
+        else if (SDL_strcmp(pKey, "currentregion") == 0)
+        {
+            map.currentregion = help.Int(pText);
+        }
+        else if (SDL_strcmp(pKey, "regions") == 0)
+        {
+            tinyxml2::XMLElement* pElem2;
+            for (pElem2 = pElem->FirstChildElement(); pElem2 != NULL; pElem2 = pElem2->NextSiblingElement())
+            {
+                int thisid = 0;
+                int thisrx = 0;
+                int thisry = 0;
+                int thisrx2 = (cl.mapwidth - 1);
+                int thisry2 = (cl.mapheight - 1);
+                if (pElem2->Attribute("id"))
+                {
+                    thisid = help.Int(pElem2->Attribute("id"));
+                }
+
+                for (tinyxml2::XMLElement* pElem3 = pElem2->FirstChildElement(); pElem3 != NULL; pElem3 = pElem3->NextSiblingElement())
+                {
+                    if (SDL_strcmp(pElem3->Value(), "rx") == 0 && pElem3->GetText() != NULL)
+                    {
+                        thisrx = help.Int(pElem3->GetText());
+                    }
+                    if (SDL_strcmp(pElem3->Value(), "ry") == 0 && pElem3->GetText() != NULL)
+                    {
+                        thisry = help.Int(pElem3->GetText());
+                    }
+                    if (SDL_strcmp(pElem3->Value(), "rx2") == 0 && pElem3->GetText() != NULL)
+                    {
+                        thisrx2 = help.Int(pElem3->GetText());
+                    }
+                    if (SDL_strcmp(pElem3->Value(), "ry2") == 0 && pElem3->GetText() != NULL)
+                    {
+                        thisry2 = help.Int(pElem3->GetText());
+                    }
+                }
+
+                map.setregion(thisid, thisrx, thisry, thisrx2, thisry2);
+            }
         }
     }
 }
@@ -6291,6 +6378,41 @@ bool Game::customsavequick(const std::string& savfile)
 
     xml::update_tag(msgs, "crewmates", crewmates());
 
+    xml::update_tag(msgs, "currentregion", map.currentregion);
+
+    tinyxml2::XMLElement* msg = xml::update_element_delete_contents(msgs, "regions");
+    for (size_t i = 0; i < SDL_arraysize(map.region); i++)
+    {
+        if (map.region[i].isvalid)
+        {
+            tinyxml2::XMLElement* region_el;
+            region_el = doc.NewElement("region");
+
+            region_el->SetAttribute("id", (help.String(i).c_str()));
+
+            tinyxml2::XMLElement* rx_el;
+            rx_el = doc.NewElement("rx");
+            rx_el->LinkEndChild(doc.NewText(help.String(map.region[i].rx).c_str()));
+            region_el->LinkEndChild(rx_el);
+
+            tinyxml2::XMLElement* ry_el;
+            ry_el = doc.NewElement("ry");
+            ry_el->LinkEndChild(doc.NewText(help.String(map.region[i].ry).c_str()));
+            region_el->LinkEndChild(ry_el);
+
+            tinyxml2::XMLElement* rx2_el;
+            rx2_el = doc.NewElement("rx2");
+            rx2_el->LinkEndChild(doc.NewText(help.String(map.region[i].rx2).c_str()));
+            region_el->LinkEndChild(rx2_el);
+
+            tinyxml2::XMLElement* ry2_el;
+            ry2_el = doc.NewElement("ry2");
+            ry2_el->LinkEndChild(doc.NewText(help.String(map.region[i].ry2).c_str()));
+            region_el->LinkEndChild(ry2_el);
+
+            msg->LinkEndChild(region_el);
+        }
+    }
 
     //Special stats
 
@@ -6331,6 +6453,8 @@ bool Game::customsavequick(const std::string& savfile)
     xml::update_tag(msgs, "hardestroom_finalstretch", (int) hardestroom_finalstretch);
 
     xml::update_tag(msgs, "showminimap", (int) map.customshowmm);
+
+    xml::update_tag(msgs, "mapreveal", (int) map.revealmap);
 
     xml::update_tag(msgs, "disabletemporaryaudiopause", (int) disabletemporaryaudiopause);
 
@@ -6852,6 +6976,7 @@ void Game::createmenu( enum Menu::MenuName t, bool samemenu/*= false*/ )
         option(loc::gettext("unfocus pause"));
         option(loc::gettext("unfocus audio pause"));
         option(loc::gettext("room name background"));
+        option(loc::gettext("checkpoint saving"));
         option(loc::gettext("return"));
         menuyoff = 0;
         maxspacing = 15;
@@ -6888,7 +7013,7 @@ void Game::createmenu( enum Menu::MenuName t, bool samemenu/*= false*/ )
         option(loc::gettext("bind restart"));
         option(loc::gettext("bind interact"), separate_interact);
         option(loc::gettext("return"));
-        menuyoff = 0;
+        menuyoff = 12;
         maxspacing = 10;
         break;
     case Menu::language:
@@ -7768,6 +7893,11 @@ void Game::returntoingame(void)
         }
     }
     DEFER_CALLBACK(nextbgcolor);
+
+    if (nocompetitive())
+    {
+        invalidate_ndm_trophy();
+    }
 }
 
 void Game::unlockAchievement(const char* name)
@@ -7820,8 +7950,22 @@ void Game::copyndmresults(void)
     SDL_memcpy(ndmresultcrewstats, crewstats, sizeof(ndmresultcrewstats));
 }
 
-static inline int get_framerate(const int slowdown)
+void Game::invalidate_ndm_trophy(void)
 {
+    if (nodeatheligible)
+    {
+        vlog_debug("NDM trophy is invalidated!");
+    }
+    nodeatheligible = false;
+}
+
+static inline int get_framerate(const int slowdown, const int deathseq)
+{
+    if (deathseq != -1)
+    {
+        return 34;
+    }
+
     switch (slowdown)
     {
     case 30:
@@ -7850,7 +7994,7 @@ int Game::get_timestep(void)
     switch (gamestate)
     {
     case GAMEMODE:
-        return get_framerate(slowdown);
+        return get_framerate(slowdown, deathseq);
     default:
         return 34;
     }

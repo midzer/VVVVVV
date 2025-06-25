@@ -27,7 +27,7 @@ option(REMOVE_ABSOLUTE_PATHS "If supported by the compiler, replace all absolute
 
 
 # Architecture Flags
-if(APPLE)
+if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
     # Wow, Apple is a huge jerk these days huh?
     set(OSX_10_9_SDK_PATH /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.9.sdk)
     if(NOT CMAKE_OSX_SYSROOT)
@@ -40,6 +40,8 @@ if(APPLE)
     set(CMAKE_OSX_DEPLOYMENT_TARGET 10.9)
     link_directories(/usr/local/lib)
     add_compile_options(-Werror=partial-availability)
+elseif(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    set(CMAKE_OSX_DEPLOYMENT_TARGET 12.0) # SDL goes back to iOS 8.0, but modern Xcode doesn't
 endif()
 
 project(VVVVVV)
@@ -50,7 +52,10 @@ endif()
 
 # RPATH
 if(NOT WIN32)
-    if(APPLE)
+    if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+        set(BIN_LIBROOT "Frameworks")
+        set(BIN_RPATH "@executable_path/Frameworks")
+    elseif(APPLE)
         set(BIN_LIBROOT "osx")
         set(BIN_RPATH "@executable_path/osx")
     elseif(CMAKE_SIZEOF_VOID_P MATCHES "8")
@@ -84,6 +89,7 @@ set(VVV_CXX_SRC
     src/Graphics.cpp
     src/GraphicsResources.cpp
     src/GraphicsUtil.cpp
+    src/IMERender.cpp
     src/Input.cpp
     src/KeyPoll.cpp
     src/Labclass.cpp
@@ -129,6 +135,9 @@ endif()
 if(GOG)
     list(APPEND VVV_C_SRC src/GOGNetwork.c)
 endif()
+if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    list(APPEND VVV_C_SRC src/SDL_uikit_main.c)
+endif()
 
 set(VVV_SRC ${VVV_CXX_SRC} ${VVV_C_SRC})
 
@@ -137,6 +146,30 @@ if(WIN32)
     add_executable(VVVVVV WIN32 ${VVV_SRC} icon.rc)
 elseif(ANDROID)
     add_library(VVVVVV SHARED ${VVV_SRC})
+elseif(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    file(GLOB_RECURSE REPO_RESOURCES "fonts/*" "lang/*")
+
+    add_executable(VVVVVV MACOSX_BUNDLE ${VVV_SRC} ${DATA_ZIP} AppIcon.xcassets ${REPO_RESOURCES})
+    set_target_properties(VVVVVV PROPERTIES
+        XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "com.distractionware.vvvvvvmobile"
+        XCODE_ATTRIBUTE_PRODUCT_NAME "VVVVVV"
+        XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1,2" # iPhone, iPad
+        XCODE_ATTRIBUTE_CURRENT_PROJECT_VERSION "2.5"
+        XCODE_ATTRIBUTE_MARKETING_VERSION "2.5"
+        XCODE_ATTRIBUTE_ASSETCATALOG_COMPILER_APPICON_NAME AppIcon
+        XCODE_ATTRIBUTE_GENERATE_INFOPLIST_FILE YES
+        MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/Info.plist"
+        XCODE_ATTRIBUTE_INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace YES
+        XCODE_ATTRIBUTE_INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents YES
+        RESOURCE "${DATA_ZIP};AppIcon.xcassets"
+    )
+
+    foreach(REPO_FILE ${REPO_RESOURCES})
+        file(RELATIVE_PATH REPO_FILE_REL "${CMAKE_CURRENT_SOURCE_DIR}" ${REPO_FILE})
+        get_filename_component(REPO_FILE_DIR ${REPO_FILE_REL} DIRECTORY)
+        set_property(SOURCE ${REPO_FILE} PROPERTY MACOSX_PACKAGE_LOCATION "Resources/${REPO_FILE_DIR}")
+        source_group("Resources/${REPO_FILE_DIR}" FILES "${REPO_FILE}")
+    endforeach()
 else()
     add_executable(VVVVVV ${VVV_SRC})
 endif()
@@ -281,17 +314,15 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     target_compile_options(VVVVVV PRIVATE -Wno-c99-extensions)
 endif()
 
+# Set standards version, disable exceptions and RTTI
 if(MSVC)
     # MSVC doesn't have /std:c99 or /std:c++98 switches!
 
     # MSVC does not officially support disabling exceptions,
     # so this is as far as we are willing to go to disable them.
     string(REGEX REPLACE "/EH[a-z]+" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-    set_source_files_properties(${VVV_CXX_SRC} PROPERTIES COMPILE_FLAGS /EHsc)
-
-    # Disable RTTI
     string(REPLACE "/GR" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-    set_source_files_properties(${VVV_CXX_SRC} PROPERTIES COMPILE_FLAGS /GR-)
+    set_source_files_properties(${VVV_CXX_SRC} PROPERTIES COMPILE_FLAGS "/EHsc /GR-")
 
     if(MSVC_VERSION GREATER 1900)
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /utf-8")
@@ -302,15 +333,9 @@ else()
     set_source_files_properties(${VVV_C_SRC} PROPERTIES COMPILE_FLAGS -std=c99)
 
     string(REGEX REPLACE "-std=[a-z0-9+]+" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-    set_source_files_properties(${VVV_CXX_SRC} PROPERTIES COMPILE_FLAGS -std=c++98)
-
-    # Disable exceptions
     string(REPLACE "-fexceptions" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-    set_source_files_properties(${VVV_CXX_SRC} PROPERTIES COMPILE_FLAGS -fno-exceptions)
-
-    # Disable RTTI
     string(REPLACE "-frtti" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-    set_source_files_properties(${VVV_CXX_SRC} PROPERTIES COMPILE_FLAGS -fno-rtti)
+    set_source_files_properties(${VVV_CXX_SRC} PROPERTIES COMPILE_FLAGS "-std=c++98 -fno-exceptions -fno-rtti")
 
     # Dependencies (as needed)
     set_source_files_properties(${FAUDIO_SRC} PROPERTIES COMPILE_FLAGS -std=c99)
@@ -428,6 +453,15 @@ elseif (EMSCRIPTEN)
         target_compile_options(faudio-static PUBLIC -sUSE_SDL=2)
         target_link_libraries(faudio-static -sUSE_SDL=2)
     endif()
+elseif(DEFINED SDL2_FRAMEWORK)
+    message(STATUS "Using pre-defined SDL2 variable SDL2_FRAMEWORK")
+    target_include_directories(VVVVVV SYSTEM PRIVATE "$<BUILD_INTERFACE:${SDL2_FRAMEWORK}/Headers>")
+    target_link_libraries(VVVVVV ${SDL2_FRAMEWORK})
+    if(BUNDLE_DEPENDENCIES)
+        target_include_directories(faudio-static SYSTEM PRIVATE "$<BUILD_INTERFACE:${SDL2_FRAMEWORK}/Headers>")
+        target_link_libraries(faudio-static ${SDL2_FRAMEWORK})
+    endif()
+    set_target_properties(VVVVVV PROPERTIES XCODE_EMBED_FRAMEWORKS ${SDL2_FRAMEWORK})
 else()
     # Only try to autodetect if both SDL2 variables aren't explicitly set
     find_package(SDL2 CONFIG)
